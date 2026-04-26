@@ -12,6 +12,7 @@ import {
 
 import { useAuth } from '../../modules/auth/AuthProvider';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   loginFormSchema,
   type LoginFormValues,
@@ -29,6 +30,7 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
+    setError: setFieldError,
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
   });
@@ -55,7 +57,9 @@ export function LoginPage() {
         (location.state as { from?: Location } | null)?.from?.pathname ?? '/';
       navigate(redirect, { replace: true });
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, setFieldError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Sign in failed.');
     }
   }

@@ -18,6 +18,7 @@ import {
 import { formatDate, title } from '../../lib/format';
 import { useAuth } from '../../modules/auth/AuthProvider';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   invitationFormSchema,
   tenantFormSchema,
@@ -60,7 +61,9 @@ export function DashboardPage() {
       await refreshUser();
       notify('Tenant created.');
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, tenantForm.setError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Could not create tenant.');
     }
   }
@@ -73,7 +76,9 @@ export function DashboardPage() {
       invitationForm.reset({ role: 'support', expires_in_hours: 168 });
       notify('Invitation sent.');
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, invitationForm.setError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Could not send invitation.');
     }
   }

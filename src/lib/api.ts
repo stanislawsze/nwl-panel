@@ -24,6 +24,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly details: unknown,
+    readonly validationErrors: Record<string, string[]> | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -56,7 +57,12 @@ http.interceptors.request.use((request) => {
 
 function normalizeError(error: unknown): never {
   if (error instanceof AxiosError) {
-    const payload = error.response?.data as ApiEnvelope<unknown> | undefined;
+    const payload = error.response?.data as
+      | (ApiEnvelope<unknown> & {
+          message?: string;
+          errors?: Record<string, string[]>;
+        })
+      | undefined;
     const status = error.response?.status ?? 0;
 
     if (status === 401) {
@@ -67,13 +73,20 @@ function normalizeError(error: unknown): never {
     const message =
       typeof payload?.meta?.message === 'string'
         ? payload.meta.message
-        : status === 401
-          ? 'Your session expired. Please sign in again.'
-          : status === 422
-            ? 'Please check the submitted values.'
-            : 'The API request failed.';
+        : typeof payload?.message === 'string'
+          ? payload.message
+          : status === 401
+            ? 'Your session expired. Please sign in again.'
+            : status === 422
+              ? 'Please check the submitted values.'
+              : 'The API request failed.';
 
-    throw new ApiError(message, status, payload ?? error);
+    throw new ApiError(
+      message,
+      status,
+      payload ?? error,
+      payload?.errors ?? null,
+    );
   }
 
   throw error;

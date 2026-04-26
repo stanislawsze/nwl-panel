@@ -16,6 +16,7 @@ import {
   useSaveDiscordIntegration,
 } from '../../features/discord/use-discord-integration';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   discordIntegrationFormSchema,
   type DiscordIntegrationFormValues,
@@ -69,7 +70,9 @@ export function DiscordPage() {
       setIsSaved(true);
       notify('Discord settings saved.');
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, form.setError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Could not save Discord settings.');
     }
   }

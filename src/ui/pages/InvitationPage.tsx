@@ -8,6 +8,7 @@ import { useInvitationPreview } from '../../features/invitations/use-invitations
 import { formatDate, title } from '../../lib/format';
 import { useAuth } from '../../modules/auth/AuthProvider';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   invitationRegistrationFormSchema,
   type InvitationRegistrationFormValues,
@@ -27,6 +28,7 @@ export function InvitationPage() {
     formState: { errors },
     handleSubmit,
     register,
+    setError: setFieldError,
   } = useForm<InvitationRegistrationFormValues>({
     resolver: zodResolver(invitationRegistrationFormSchema),
   });
@@ -42,7 +44,9 @@ export function InvitationPage() {
       notify('Workspace joined successfully.');
       navigate('/', { replace: true });
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, setFieldError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Invitation registration failed.');
     } finally {
       setIsSubmitting(false);

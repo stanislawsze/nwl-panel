@@ -28,3 +28,18 @@ test('validates sign in fields before submitting', async ({ page }) => {
     page.getByText('Password must be at least 8 characters.'),
   ).toBeVisible();
 });
+
+test('shows backend validation errors on the matching field', async ({
+  page,
+}) => {
+  await mockApi(page);
+
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('blocked@example.com');
+  await page.getByLabel('Password').fill('password123');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  await expect(
+    page.getByText('These credentials do not match our records.'),
+  ).toBeVisible();
+});

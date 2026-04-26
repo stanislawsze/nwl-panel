@@ -109,6 +109,21 @@ export async function mockApi(page: Page) {
     const method = request.method();
 
     if (method === 'POST' && path === '/login') {
+      const payload = request.postDataJSON() as { email?: string };
+
+      if (payload.email === 'blocked@example.com') {
+        return json(
+          route,
+          {
+            message: 'The given data was invalid.',
+            errors: {
+              email: ['These credentials do not match our records.'],
+            },
+          },
+          422,
+        );
+      }
+
       return json(route, {
         data: {
           user,

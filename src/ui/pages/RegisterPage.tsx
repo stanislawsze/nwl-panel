@@ -6,6 +6,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../modules/auth/AuthProvider';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   registerFormSchema,
   type RegisterFormValues,
@@ -21,6 +22,7 @@ export function RegisterPage() {
     formState: { errors, isSubmitting },
     handleSubmit,
     register: registerField,
+    setError: setFieldError,
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerFormSchema),
   });
@@ -37,7 +39,9 @@ export function RegisterPage() {
       notify('Account created successfully.');
       navigate('/', { replace: true });
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, setFieldError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Registration failed.');
     }
   }

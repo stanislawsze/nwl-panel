@@ -31,6 +31,7 @@ import {
 } from '../../features/members/use-members';
 import { formatDate, title } from '../../lib/format';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
   memberFormSchema,
   type MemberFormValues,
@@ -78,7 +79,9 @@ export function MembersPage() {
       memberForm.reset({ role: 'support', email: '' });
       notify('Member added.');
     } catch (caught) {
-      setError(caught);
+      if (!applyApiValidationErrors(caught, memberForm.setError)) {
+        setError(caught);
+      }
       notifyError(caught, 'Could not add member.');
     }
   }
