@@ -1,13 +1,26 @@
+import CancelScheduleSendIcon from '@mui/icons-material/CancelScheduleSend';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, IconButton, MenuItem, TextField } from '@mui/material';
+import {
+  Button,
+  Chip,
+  type ChipProps,
+  IconButton,
+  MenuItem,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+} from '@mui/material';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
   useInvitations,
+  useRevokeInvitation,
   useResendInvitation,
 } from '../../features/invitations/use-invitations';
 import {
@@ -23,8 +36,10 @@ import {
   type MemberFormValues,
 } from '../../shared/forms/schemas';
 import type { MembershipRole } from '../../types';
-import { membershipRoles } from '../../types';
+import { membershipRoles, type TenantInvitation } from '../../types';
 import { FormError } from '../FormError';
+
+type InvitationStatus = 'all' | 'pending' | 'accepted' | 'revoked' | 'expired';
 
 export function MembersPage() {
   const membersQuery = useMembers();
@@ -33,8 +48,11 @@ export function MembersPage() {
   const updateMemberMutation = useUpdateMember();
   const removeMemberMutation = useRemoveMember();
   const resendInvitationMutation = useResendInvitation();
+  const revokeInvitationMutation = useRevokeInvitation();
   const { notify, notifyError } = useFeedback();
   const [error, setError] = useState<unknown>(null);
+  const [invitationStatus, setInvitationStatus] =
+    useState<InvitationStatus>('pending');
   const memberForm = useForm<MemberFormValues>({
     defaultValues: {
       role: 'support',
@@ -44,6 +62,13 @@ export function MembersPage() {
 
   const members = membersQuery.data ?? [];
   const invitations = invitationsQuery.data ?? [];
+  const filteredInvitations = invitations.filter((invitation) => {
+    if (invitationStatus === 'all') {
+      return true;
+    }
+
+    return invitationStatusFor(invitation) === invitationStatus;
+  });
 
   async function addMember(values: MemberFormValues) {
     setError(null);
@@ -85,6 +110,27 @@ export function MembersPage() {
     } catch (caught) {
       setError(caught);
       notifyError(caught, 'Could not resend invitation.');
+    }
+  }
+
+  async function revoke(invitationId: number) {
+    try {
+      await revokeInvitationMutation.mutateAsync(invitationId);
+      notify('Invitation revoked.');
+    } catch (caught) {
+      setError(caught);
+      notifyError(caught, 'Could not revoke invitation.');
+    }
+  }
+
+  async function copyInvitationLink(invitation: TenantInvitation) {
+    const link = `${window.location.origin}/invitations/${invitation.token}`;
+
+    try {
+      await window.navigator.clipboard.writeText(link);
+      notify('Invitation link copied.');
+    } catch {
+      notifyError(null, 'Could not copy invitation link.');
     }
   }
 
@@ -188,25 +234,100 @@ export function MembersPage() {
       </section>
 
       <section className="panel">
-        <h2>Open invitations</h2>
+        <div className="section-heading">
+          <h2>Invitations</h2>
+          <ToggleButtonGroup
+            aria-label="Invitation status"
+            exclusive
+            onChange={(_, value: InvitationStatus | null) => {
+              if (value) {
+                setInvitationStatus(value);
+              }
+            }}
+            size="small"
+            value={invitationStatus}
+          >
+            <ToggleButton value="pending">Pending</ToggleButton>
+            <ToggleButton value="accepted">Accepted</ToggleButton>
+            <ToggleButton value="revoked">Revoked</ToggleButton>
+            <ToggleButton value="expired">Expired</ToggleButton>
+            <ToggleButton value="all">All</ToggleButton>
+          </ToggleButtonGroup>
+        </div>
         <div className="table">
-          {invitations.map((invitation) => (
-            <div className="table-row" key={invitation.id}>
-              <span>{invitation.email}</span>
-              <span>{title(invitation.role)}</span>
-              <span>{invitation.is_pending ? 'Pending' : 'Closed'}</span>
-              <Button
-                disabled={resendInvitationMutation.isPending}
-                onClick={() => void resend(invitation.id)}
-                size="small"
-                startIcon={<VerifiedUserIcon />}
-                type="button"
-                variant="outlined"
-              >
-                Resend
-              </Button>
-            </div>
-          ))}
+          {filteredInvitations.map((invitation) => {
+            const status = invitationStatusFor(invitation);
+
+            return (
+              <div className="table-row invitation-row" key={invitation.id}>
+                <span>
+                  <strong>{invitation.email}</strong>
+                  <small>
+                    Sent{' '}
+                    {formatDate(
+                      invitation.last_sent_at ?? invitation.created_at,
+                    )}
+                  </small>
+                </span>
+                <span>{title(invitation.role)}</span>
+                <Chip
+                  color={statusColor(status)}
+                  label={title(status)}
+                  size="small"
+                  variant="outlined"
+                />
+                <span>{formatDate(invitation.expires_at)}</span>
+                <div className="row-actions">
+                  <Tooltip title="Copy invitation link">
+                    <span>
+                      <IconButton
+                        aria-label={`Copy invitation link for ${invitation.email}`}
+                        disabled={!invitation.is_pending}
+                        onClick={() => void copyInvitationLink(invitation)}
+                        size="small"
+                      >
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Resend invitation">
+                    <span>
+                      <IconButton
+                        aria-label={`Resend invitation to ${invitation.email}`}
+                        disabled={
+                          !invitation.is_pending ||
+                          resendInvitationMutation.isPending
+                        }
+                        onClick={() => void resend(invitation.id)}
+                        size="small"
+                      >
+                        <VerifiedUserIcon fontSize="inherit" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Revoke invitation">
+                    <span>
+                      <IconButton
+                        aria-label={`Revoke invitation for ${invitation.email}`}
+                        color="error"
+                        disabled={
+                          !invitation.is_pending ||
+                          revokeInvitationMutation.isPending
+                        }
+                        onClick={() => void revoke(invitation.id)}
+                        size="small"
+                      >
+                        <CancelScheduleSendIcon fontSize="inherit" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </div>
+              </div>
+            );
+          })}
+          {invitations.length > 0 && filteredInvitations.length === 0 && (
+            <p className="muted">No invitations match this filter.</p>
+          )}
           {invitations.length === 0 && (
             <p className="muted">No invitations to show.</p>
           )}
@@ -214,4 +335,40 @@ export function MembersPage() {
       </section>
     </main>
   );
+}
+
+function invitationStatusFor(
+  invitation: TenantInvitation,
+): Exclude<InvitationStatus, 'all'> {
+  if (invitation.accepted_at) {
+    return 'accepted';
+  }
+
+  if (invitation.revoked_at) {
+    return 'revoked';
+  }
+
+  if (
+    invitation.expires_at &&
+    new Date(invitation.expires_at).getTime() < Date.now()
+  ) {
+    return 'expired';
+  }
+
+  return 'pending';
+}
+
+function statusColor(
+  status: Exclude<InvitationStatus, 'all'>,
+): ChipProps['color'] {
+  switch (status) {
+    case 'accepted':
+      return 'success';
+    case 'revoked':
+      return 'error';
+    case 'expired':
+      return 'warning';
+    case 'pending':
+      return 'info';
+  }
 }

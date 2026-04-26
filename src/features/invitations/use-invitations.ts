@@ -39,3 +39,14 @@ export function useResendInvitation() {
     },
   });
 }
+
+export function useRevokeInvitation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.revokeInvitation,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.invitations });
+    },
+  });
+}
