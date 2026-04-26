@@ -42,6 +42,9 @@ const Schema = z.object({...})
 type Type = z.infer<typeof Schema>
 ```
 
+Endpoint paths are centralized in `src/shared/api/endpoints.ts`; response schemas live in `src/types.ts`.
+See `docs/API_CONTRACTS.md` for the contract workflow.
+
 ---
 
 ## Styling

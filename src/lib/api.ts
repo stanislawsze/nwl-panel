@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 
 import { config } from '../config';
+import { endpoints } from '../shared/api/endpoints';
 import {
   authPayloadSchema,
   discordIntegrationPayloadSchema,
@@ -78,12 +79,15 @@ function normalizeError(error: unknown): never {
   throw error;
 }
 
-function normalizeParseError(error: unknown): never {
+function normalizeParseError(error: unknown, path: string): never {
   if (error instanceof z.ZodError) {
     throw new ApiError(
-      'The API response did not match the expected frontend contract.',
+      `The API response for ${path} did not match the expected frontend contract.`,
       0,
-      error.issues,
+      {
+        endpoint: path,
+        issues: error.issues,
+      },
     );
   }
 
@@ -107,81 +111,101 @@ async function request<TSchema extends z.ZodType>(
 
     return schema.parse(response.data.data);
   } catch (error) {
-    normalizeParseError(error);
+    normalizeParseError(error, path);
   }
 }
 
 export const api = {
   login: (payload: { email: string; password: string }) =>
-    request(authPayloadSchema, '/login', { method: 'POST', data: payload }),
+    request(authPayloadSchema, endpoints.auth.login, {
+      method: 'POST',
+      data: payload,
+    }),
   register: (payload: { name: string; email: string; password: string }) =>
-    request(authPayloadSchema, '/register', { method: 'POST', data: payload }),
-  me: () => request(userSchema, '/me'),
+    request(authPayloadSchema, endpoints.auth.register, {
+      method: 'POST',
+      data: payload,
+    }),
+  me: () => request(userSchema, endpoints.auth.me),
   refresh: () =>
-    request(z.object({ token: z.string() }), '/refresh', { method: 'POST' }),
-  logout: () => request(z.null(), '/logout', { method: 'POST' }),
-  tenants: () => request(z.array(tenantSchema), '/tenants'),
+    request(z.object({ token: z.string() }), endpoints.auth.refresh, {
+      method: 'POST',
+    }),
+  logout: () => request(z.null(), endpoints.auth.logout, { method: 'POST' }),
+  tenants: () => request(z.array(tenantSchema), endpoints.tenants.index),
   createTenant: (payload: { name: string }) =>
-    request(tenantSchema, '/tenants', { method: 'POST', data: payload }),
+    request(tenantSchema, endpoints.tenants.store, {
+      method: 'POST',
+      data: payload,
+    }),
   switchTenant: (tenantId: number) =>
-    request(tenantSchema, `/tenants/${tenantId}/switch`, { method: 'POST' }),
+    request(tenantSchema, endpoints.tenants.switch(tenantId), {
+      method: 'POST',
+    }),
   members: () =>
-    request(z.array(tenantMemberSchema), '/tenants/current/members'),
+    request(z.array(tenantMemberSchema), endpoints.tenants.members.index),
   addMember: (payload: { email: string; role: MembershipRole }) =>
-    request(tenantMemberSchema, '/tenants/current/members', {
+    request(tenantMemberSchema, endpoints.tenants.members.store, {
       method: 'POST',
       data: payload,
     }),
   updateMember: (userId: number, payload: { role: MembershipRole }) =>
-    request(tenantMemberSchema, `/tenants/current/members/${userId}`, {
+    request(tenantMemberSchema, endpoints.tenants.members.update(userId), {
       method: 'PATCH',
       data: payload,
     }),
   removeMember: (userId: number) =>
-    request(z.null(), `/tenants/current/members/${userId}`, {
+    request(z.null(), endpoints.tenants.members.destroy(userId), {
       method: 'DELETE',
     }),
   invitations: () =>
-    request(z.array(tenantInvitationSchema), '/tenants/current/invitations'),
+    request(
+      z.array(tenantInvitationSchema),
+      endpoints.tenants.invitations.index,
+    ),
   createInvitation: (payload: {
     email: string;
     role: MembershipRole;
     expires_in_hours?: number;
   }) =>
-    request(tenantInvitationSchema, '/tenants/current/invitations', {
+    request(tenantInvitationSchema, endpoints.tenants.invitations.store, {
       method: 'POST',
       data: payload,
     }),
   resendInvitation: (invitationId: number) =>
     request(
       tenantInvitationSchema,
-      `/tenants/current/invitations/${invitationId}/resend`,
+      endpoints.tenants.invitations.resend(invitationId),
       {
         method: 'POST',
       },
     ),
   revokeInvitation: (invitationId: number) =>
-    request(z.null(), `/tenants/current/invitations/${invitationId}`, {
+    request(z.null(), endpoints.tenants.invitations.revoke(invitationId), {
       method: 'DELETE',
     }),
   previewInvitation: (token: string) =>
-    request(invitationPreviewSchema, `/tenants/invitations/${token}`),
+    request(invitationPreviewSchema, endpoints.tenants.invitations.show(token)),
   registerInvitation: (
     token: string,
     payload: { name: string; password: string },
   ) =>
-    request(authPayloadSchema, `/tenants/invitations/${token}/register`, {
+    request(authPayloadSchema, endpoints.tenants.invitations.register(token), {
       method: 'POST',
       data: payload,
     }),
   acceptInvitation: (token: string) =>
-    request(tenantInvitationSchema, `/tenants/invitations/${token}/accept`, {
-      method: 'POST',
-    }),
+    request(
+      tenantInvitationSchema,
+      endpoints.tenants.invitations.accept(token),
+      {
+        method: 'POST',
+      },
+    ),
   discordIntegration: () =>
-    request(discordIntegrationPayloadSchema, '/discord/integration'),
+    request(discordIntegrationPayloadSchema, endpoints.discord.integration),
   saveDiscordIntegration: (payload: Record<string, unknown>) =>
-    request(discordIntegrationSchema, '/discord/integration', {
+    request(discordIntegrationSchema, endpoints.discord.integration, {
       method: 'PUT',
       data: payload,
     }),
