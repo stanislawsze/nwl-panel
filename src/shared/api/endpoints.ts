@@ -27,6 +27,9 @@ export const endpoints = {
       revoke: (invitationId: number) =>
         `/tenants/current/invitations/${invitationId}`,
     },
+    auditLogs: {
+      index: '/tenants/current/audit-logs',
+    },
   },
   discord: {
     integration: '/discord/integration',

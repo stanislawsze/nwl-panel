@@ -4,10 +4,11 @@ import { api } from '../../lib/api';
 import { queryKeys } from '../../shared/api/query-keys';
 import type { MembershipRole } from '../../types';
 
-export function useMembers() {
+export function useMembers(enabled = true) {
   return useQuery({
     queryKey: queryKeys.members,
     queryFn: api.members,
+    enabled,
   });
 }
 

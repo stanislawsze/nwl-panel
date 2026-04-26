@@ -87,6 +87,23 @@ export const tenantInvitationSchema = z.object({
   updated_at: apiDateSchema,
 });
 
+export const tenantAuditLogCauserSchema = z
+  .object({
+    id: apiIdSchema,
+    name: z.string().nullable(),
+    email: z.string().nullable(),
+  })
+  .nullable();
+
+export const tenantAuditLogSchema = z.object({
+  id: apiIdSchema,
+  event: z.string().nullable(),
+  description: z.string(),
+  causer: tenantAuditLogCauserSchema,
+  properties: z.record(z.string(), z.unknown()).default({}),
+  created_at: apiDateSchema,
+});
+
 export const invitationPreviewTenantSchema = z.object({
   id: apiIdSchema.nullable(),
   name: z.string().nullable(),
@@ -159,6 +176,7 @@ export type User = z.infer<typeof userSchema>;
 export type AuthPayload = z.infer<typeof authPayloadSchema>;
 export type TenantMember = z.infer<typeof tenantMemberSchema>;
 export type TenantInvitation = z.infer<typeof tenantInvitationSchema>;
+export type TenantAuditLog = z.infer<typeof tenantAuditLogSchema>;
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
 export type DiscordIntegration = z.infer<typeof discordIntegrationSchema>;
 export type DiscordIntegrationPayload = z.infer<

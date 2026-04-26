@@ -44,6 +44,9 @@ describe('endpoints', () => {
     expect(endpoints.tenants.invitations.revoke(7)).toBe(
       '/tenants/current/invitations/7',
     );
+    expect(endpoints.tenants.auditLogs.index).toBe(
+      '/tenants/current/audit-logs',
+    );
 
     expect(endpoints.discord.integration).toBe('/discord/integration');
   });

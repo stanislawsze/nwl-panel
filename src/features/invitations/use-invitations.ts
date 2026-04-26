@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { queryKeys } from '../../shared/api/query-keys';
 
-export function useInvitations() {
+export function useInvitations(enabled = true) {
   return useQuery({
     queryKey: queryKeys.invitations,
     queryFn: api.invitations,
+    enabled,
   });
 }
 

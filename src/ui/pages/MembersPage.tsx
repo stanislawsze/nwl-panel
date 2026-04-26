@@ -30,6 +30,7 @@ import {
   useUpdateMember,
 } from '../../features/members/use-members';
 import { formatDate, title } from '../../lib/format';
+import { useTenantPermissions } from '../../shared/auth/permissions';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
 import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
@@ -43,8 +44,10 @@ import { FormError } from '../FormError';
 type InvitationStatus = 'all' | 'pending' | 'accepted' | 'revoked' | 'expired';
 
 export function MembersPage() {
-  const membersQuery = useMembers();
-  const invitationsQuery = useInvitations();
+  const { canCreateUsers, canDeleteUsers, canEditUsers, canViewUsers } =
+    useTenantPermissions();
+  const membersQuery = useMembers(canViewUsers);
+  const invitationsQuery = useInvitations(canViewUsers);
   const addMemberMutation = useAddMember();
   const updateMemberMutation = useUpdateMember();
   const removeMemberMutation = useRemoveMember();
@@ -150,192 +153,213 @@ export function MembersPage() {
         error={error ?? membersQuery.error ?? invitationsQuery.error}
       />
 
-      <form
-        className="panel form-row"
-        onSubmit={(event) => void memberForm.handleSubmit(addMember)(event)}
-      >
-        <TextField
-          className="flex-1"
-          error={Boolean(memberForm.formState.errors.email)}
-          helperText={memberForm.formState.errors.email?.message}
-          label="Existing user email"
-          required
-          size="small"
-          type="email"
-          {...memberForm.register('email')}
-        />
-        <TextField
-          defaultValue="support"
-          error={Boolean(memberForm.formState.errors.role)}
-          helperText={memberForm.formState.errors.role?.message}
-          label="Role"
-          required
-          select
-          size="small"
-          {...memberForm.register('role')}
-        >
-          {membershipRoles
-            .filter((role) => role !== 'owner')
-            .map((role) => (
-              <MenuItem key={role} value={role}>
-                {title(role)}
-              </MenuItem>
-            ))}
-        </TextField>
-        <Button
-          disabled={addMemberMutation.isPending}
-          startIcon={<PersonAddIcon />}
-          type="submit"
-        >
-          Add member
-        </Button>
-      </form>
+      {!canViewUsers && (
+        <section className="panel">
+          <h2>Permission required</h2>
+          <p className="muted">
+            Your current tenant role cannot view members or invitations.
+          </p>
+        </section>
+      )}
 
-      <section className="panel">
-        <h2>Active members</h2>
-        <div className="table">
-          {members.map((member) => (
-            <div className="table-row" key={member.id}>
-              <span>
-                <strong>{member.name}</strong>
-                <small>{member.email}</small>
-              </span>
-              <TextField
-                aria-label={`Role for ${member.name}`}
-                disabled={member.is_current_user}
-                onChange={(event) =>
-                  void updateRole(
-                    member.id,
-                    event.target.value as MembershipRole,
-                  )
-                }
-                select
-                size="small"
-                value={member.membership_role ?? 'member'}
-              >
-                {membershipRoles.map((role) => (
-                  <MenuItem key={role} value={role}>
-                    {title(role)}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <span>{formatDate(member.joined_at)}</span>
-              <IconButton
-                aria-label={`Remove ${member.name}`}
-                disabled={
-                  member.is_current_user || removeMemberMutation.isPending
-                }
-                onClick={() => void remove(member.id)}
-                size="small"
-              >
-                <Trash2 aria-hidden="true" size={16} />
-              </IconButton>
-            </div>
-          ))}
-          {members.length === 0 && <p className="muted">No members to show.</p>}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <h2>Invitations</h2>
-          <ToggleButtonGroup
-            aria-label="Invitation status"
-            exclusive
-            onChange={(_, value: InvitationStatus | null) => {
-              if (value) {
-                setInvitationStatus(value);
-              }
-            }}
+      {canCreateUsers && (
+        <form
+          className="panel form-row"
+          onSubmit={(event) => void memberForm.handleSubmit(addMember)(event)}
+        >
+          <TextField
+            className="flex-1"
+            error={Boolean(memberForm.formState.errors.email)}
+            helperText={memberForm.formState.errors.email?.message}
+            label="Existing user email"
+            required
             size="small"
-            value={invitationStatus}
+            type="email"
+            {...memberForm.register('email')}
+          />
+          <TextField
+            defaultValue="support"
+            error={Boolean(memberForm.formState.errors.role)}
+            helperText={memberForm.formState.errors.role?.message}
+            label="Role"
+            required
+            select
+            size="small"
+            {...memberForm.register('role')}
           >
-            <ToggleButton value="pending">Pending</ToggleButton>
-            <ToggleButton value="accepted">Accepted</ToggleButton>
-            <ToggleButton value="revoked">Revoked</ToggleButton>
-            <ToggleButton value="expired">Expired</ToggleButton>
-            <ToggleButton value="all">All</ToggleButton>
-          </ToggleButtonGroup>
-        </div>
-        <div className="table">
-          {filteredInvitations.map((invitation) => {
-            const status = invitationStatusFor(invitation);
+            {membershipRoles
+              .filter((role) => role !== 'owner')
+              .map((role) => (
+                <MenuItem key={role} value={role}>
+                  {title(role)}
+                </MenuItem>
+              ))}
+          </TextField>
+          <Button
+            disabled={addMemberMutation.isPending}
+            startIcon={<PersonAddIcon />}
+            type="submit"
+          >
+            Add member
+          </Button>
+        </form>
+      )}
 
-            return (
-              <div className="table-row invitation-row" key={invitation.id}>
+      {canViewUsers && (
+        <section className="panel">
+          <h2>Active members</h2>
+          <div className="table">
+            {members.map((member) => (
+              <div className="table-row" key={member.id}>
                 <span>
-                  <strong>{invitation.email}</strong>
-                  <small>
-                    Sent{' '}
-                    {formatDate(
-                      invitation.last_sent_at ?? invitation.created_at,
-                    )}
-                  </small>
+                  <strong>{member.name}</strong>
+                  <small>{member.email}</small>
                 </span>
-                <span>{title(invitation.role)}</span>
-                <Chip
-                  color={statusColor(status)}
-                  label={title(status)}
+                <TextField
+                  aria-label={`Role for ${member.name}`}
+                  disabled={member.is_current_user || !canEditUsers}
+                  onChange={(event) =>
+                    void updateRole(
+                      member.id,
+                      event.target.value as MembershipRole,
+                    )
+                  }
+                  select
                   size="small"
-                  variant="outlined"
-                />
-                <span>{formatDate(invitation.expires_at)}</span>
-                <div className="row-actions">
-                  <Tooltip title="Copy invitation link">
-                    <span>
-                      <IconButton
-                        aria-label={`Copy invitation link for ${invitation.email}`}
-                        disabled={!invitation.is_pending}
-                        onClick={() => void copyInvitationLink(invitation)}
-                        size="small"
-                      >
-                        <ContentCopyIcon fontSize="inherit" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title="Resend invitation">
-                    <span>
-                      <IconButton
-                        aria-label={`Resend invitation to ${invitation.email}`}
-                        disabled={
-                          !invitation.is_pending ||
-                          resendInvitationMutation.isPending
-                        }
-                        onClick={() => void resend(invitation.id)}
-                        size="small"
-                      >
-                        <VerifiedUserIcon fontSize="inherit" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title="Revoke invitation">
-                    <span>
-                      <IconButton
-                        aria-label={`Revoke invitation for ${invitation.email}`}
-                        color="error"
-                        disabled={
-                          !invitation.is_pending ||
-                          revokeInvitationMutation.isPending
-                        }
-                        onClick={() => void revoke(invitation.id)}
-                        size="small"
-                      >
-                        <CancelScheduleSendIcon fontSize="inherit" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </div>
+                  value={member.membership_role ?? 'member'}
+                >
+                  {membershipRoles.map((role) => (
+                    <MenuItem key={role} value={role}>
+                      {title(role)}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <span>{formatDate(member.joined_at)}</span>
+                <IconButton
+                  aria-label={`Remove ${member.name}`}
+                  disabled={
+                    member.is_current_user ||
+                    !canDeleteUsers ||
+                    removeMemberMutation.isPending
+                  }
+                  onClick={() => void remove(member.id)}
+                  size="small"
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                </IconButton>
               </div>
-            );
-          })}
-          {invitations.length > 0 && filteredInvitations.length === 0 && (
-            <p className="muted">No invitations match this filter.</p>
-          )}
-          {invitations.length === 0 && (
-            <p className="muted">No invitations to show.</p>
-          )}
-        </div>
-      </section>
+            ))}
+            {members.length === 0 && (
+              <p className="muted">No members to show.</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {canViewUsers && (
+        <section className="panel">
+          <div className="section-heading">
+            <h2>Invitations</h2>
+            <ToggleButtonGroup
+              aria-label="Invitation status"
+              exclusive
+              onChange={(_, value: InvitationStatus | null) => {
+                if (value) {
+                  setInvitationStatus(value);
+                }
+              }}
+              size="small"
+              value={invitationStatus}
+            >
+              <ToggleButton value="pending">Pending</ToggleButton>
+              <ToggleButton value="accepted">Accepted</ToggleButton>
+              <ToggleButton value="revoked">Revoked</ToggleButton>
+              <ToggleButton value="expired">Expired</ToggleButton>
+              <ToggleButton value="all">All</ToggleButton>
+            </ToggleButtonGroup>
+          </div>
+          <div className="table">
+            {filteredInvitations.map((invitation) => {
+              const status = invitationStatusFor(invitation);
+
+              return (
+                <div className="table-row invitation-row" key={invitation.id}>
+                  <span>
+                    <strong>{invitation.email}</strong>
+                    <small>
+                      Sent{' '}
+                      {formatDate(
+                        invitation.last_sent_at ?? invitation.created_at,
+                      )}
+                    </small>
+                  </span>
+                  <span>{title(invitation.role)}</span>
+                  <Chip
+                    color={statusColor(status)}
+                    label={title(status)}
+                    size="small"
+                    variant="outlined"
+                  />
+                  <span>{formatDate(invitation.expires_at)}</span>
+                  <div className="row-actions">
+                    <Tooltip title="Copy invitation link">
+                      <span>
+                        <IconButton
+                          aria-label={`Copy invitation link for ${invitation.email}`}
+                          disabled={!invitation.is_pending}
+                          onClick={() => void copyInvitationLink(invitation)}
+                          size="small"
+                        >
+                          <ContentCopyIcon fontSize="inherit" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Resend invitation">
+                      <span>
+                        <IconButton
+                          aria-label={`Resend invitation to ${invitation.email}`}
+                          disabled={
+                            !invitation.is_pending ||
+                            !canCreateUsers ||
+                            resendInvitationMutation.isPending
+                          }
+                          onClick={() => void resend(invitation.id)}
+                          size="small"
+                        >
+                          <VerifiedUserIcon fontSize="inherit" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Revoke invitation">
+                      <span>
+                        <IconButton
+                          aria-label={`Revoke invitation for ${invitation.email}`}
+                          color="error"
+                          disabled={
+                            !invitation.is_pending ||
+                            !canDeleteUsers ||
+                            revokeInvitationMutation.isPending
+                          }
+                          onClick={() => void revoke(invitation.id)}
+                          size="small"
+                        >
+                          <CancelScheduleSendIcon fontSize="inherit" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </div>
+                </div>
+              );
+            })}
+            {invitations.length > 0 && filteredInvitations.length === 0 && (
+              <p className="muted">No invitations match this filter.</p>
+            )}
+            {invitations.length === 0 && (
+              <p className="muted">No invitations to show.</p>
+            )}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

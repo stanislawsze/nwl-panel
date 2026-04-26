@@ -9,6 +9,7 @@ import {
   discordIntegrationSchema,
   invitationPreviewSchema,
   tenantInvitationSchema,
+  tenantAuditLogSchema,
   tenantMemberSchema,
   tenantSchema,
   userSchema,
@@ -113,6 +114,7 @@ async function request<TSchema extends z.ZodType>(
   options: {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     data?: unknown;
+    params?: Record<string, string | number | undefined>;
   } = {},
 ): Promise<z.infer<TSchema>> {
   try {
@@ -120,6 +122,7 @@ async function request<TSchema extends z.ZodType>(
       url: path,
       method: options.method ?? 'GET',
       data: options.data,
+      params: options.params,
     });
 
     return schema.parse(response.data.data);
@@ -196,6 +199,10 @@ export const api = {
   revokeInvitation: (invitationId: number) =>
     request(z.null(), endpoints.tenants.invitations.revoke(invitationId), {
       method: 'DELETE',
+    }),
+  auditLogs: (params: { event?: string; limit?: number } = {}) =>
+    request(z.array(tenantAuditLogSchema), endpoints.tenants.auditLogs.index, {
+      params,
     }),
   previewInvitation: (token: string) =>
     request(invitationPreviewSchema, endpoints.tenants.invitations.show(token)),

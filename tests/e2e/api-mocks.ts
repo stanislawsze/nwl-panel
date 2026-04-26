@@ -8,7 +8,13 @@ const tenant = {
   slug: 'operations-workspace',
   owner_user_id: 1,
   membership_role: 'owner',
-  permissions: ['view users', 'create users', 'edit users'],
+  permissions: [
+    'view users',
+    'create users',
+    'edit users',
+    'delete users',
+    'view audit logs',
+  ],
   is_current: true,
   created_at: '2026-04-26T10:00:00Z',
   updated_at: '2026-04-26T10:00:00Z',
@@ -32,7 +38,13 @@ const members = [
     name: 'Admin User',
     email: 'admin@example.com',
     membership_role: 'owner',
-    permissions: ['view users', 'create users', 'edit users'],
+    permissions: [
+      'view users',
+      'create users',
+      'edit users',
+      'delete users',
+      'view audit logs',
+    ],
     is_current_user: true,
     joined_at: '2026-04-26T10:00:00Z',
   },
@@ -101,6 +113,41 @@ const discordIntegration = {
   updated_at: '2026-04-26T10:00:00Z',
 };
 
+const auditLogs = [
+  {
+    id: 1,
+    event: 'tenant.invitation_created',
+    description: 'Tenant invitation created',
+    causer: {
+      id: 1,
+      name: 'Admin User',
+      email: 'admin@example.com',
+    },
+    properties: {
+      tenant_id: 1,
+      email: 'pending@example.com',
+      role: 'support',
+    },
+    created_at: '2026-04-26T12:00:00Z',
+  },
+  {
+    id: 2,
+    event: 'tenant.member_added',
+    description: 'Tenant member added',
+    causer: {
+      id: 1,
+      name: 'Admin User',
+      email: 'admin@example.com',
+    },
+    properties: {
+      tenant_id: 1,
+      member_email: 'support@example.com',
+      role: 'support',
+    },
+    created_at: '2026-04-26T11:00:00Z',
+  },
+];
+
 export async function mockApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -151,6 +198,18 @@ export async function mockApi(page: Page) {
 
     if (method === 'GET' && path === '/tenants/current/invitations') {
       return json(route, { data: invitations, meta: {} });
+    }
+
+    if (method === 'GET' && path === '/tenants/current/audit-logs') {
+      const event = url.searchParams.get('event');
+
+      return json(route, {
+        data:
+          event === null
+            ? auditLogs
+            : auditLogs.filter((log) => log.event === event),
+        meta: { limit: 50 },
+      });
     }
 
     if (method === 'POST' && path === '/tenants/current/invitations') {

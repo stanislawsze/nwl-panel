@@ -4,6 +4,7 @@ import {
   authPayloadSchema,
   discordIntegrationSchema,
   invitationPreviewSchema,
+  tenantAuditLogSchema,
   tenantInvitationSchema,
   tenantMemberSchema,
   tenantSchema,
@@ -86,6 +87,27 @@ describe('api resource schemas', () => {
         expires_at: '2026-04-30T10:00:00Z',
         created_at: '2026-04-26T10:00:00Z',
         updated_at: '2026-04-26T10:00:00Z',
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts tenant audit log resources', () => {
+    expect(() =>
+      tenantAuditLogSchema.parse({
+        id: 1,
+        event: 'tenant.invitation_created',
+        description: 'Invitation created',
+        causer: {
+          id: 1,
+          name: 'Admin',
+          email: 'admin@example.com',
+        },
+        properties: {
+          tenant_id: 1,
+          email: 'invitee@example.com',
+          role: 'support',
+        },
+        created_at: '2026-04-26T10:00:00Z',
       }),
     ).not.toThrow();
   });

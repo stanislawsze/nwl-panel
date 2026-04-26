@@ -3,6 +3,7 @@ import {
   LogOut,
   MessageCircle,
   Moon,
+  ShieldCheck,
   Sun,
   Users,
   Workflow,
@@ -10,18 +11,25 @@ import {
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { useAuth } from '../modules/auth/AuthProvider';
+import { useTenantPermissions } from '../shared/auth/permissions';
 import { useColorMode } from '../shared/theme/ColorModeProvider';
 import { TenantSwitcher } from './TenantSwitcher';
 
-const navItems = [
-  { to: '/', label: 'Overview', icon: Workflow },
-  { to: '/members', label: 'Members', icon: Users },
-  { to: '/discord', label: 'Discord', icon: MessageCircle },
-];
-
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const { canViewAuditLogs, canViewUsers } = useTenantPermissions();
   const { mode, toggleMode } = useColorMode();
+  const navItems = [
+    { to: '/', label: 'Overview', icon: Workflow, visible: true },
+    { to: '/members', label: 'Members', icon: Users, visible: canViewUsers },
+    {
+      to: '/audit',
+      label: 'Audit',
+      icon: ShieldCheck,
+      visible: canViewAuditLogs,
+    },
+    { to: '/discord', label: 'Discord', icon: MessageCircle, visible: true },
+  ];
 
   return (
     <div className="app-shell">
@@ -31,15 +39,17 @@ export function AppLayout() {
           <strong>{user?.current_tenant?.name ?? 'No tenant'}</strong>
         </div>
         <nav className="nav-list" aria-label="Primary">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink key={item.to} to={item.to} end={item.to === '/'}>
-                <Icon aria-hidden="true" size={18} />
-                {item.label}
-              </NavLink>
-            );
-          })}
+          {navItems
+            .filter((item) => item.visible)
+            .map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink key={item.to} to={item.to} end={item.to === '/'}>
+                  <Icon aria-hidden="true" size={18} />
+                  {item.label}
+                </NavLink>
+              );
+            })}
         </nav>
         <button
           className="ghost-button"

@@ -17,6 +17,7 @@ import {
 } from '../../features/tenants/use-tenants';
 import { formatDate, title } from '../../lib/format';
 import { useAuth } from '../../modules/auth/AuthProvider';
+import { useTenantPermissions } from '../../shared/auth/permissions';
 import { useFeedback } from '../../shared/feedback/FeedbackProvider';
 import { applyApiValidationErrors } from '../../shared/forms/api-errors';
 import {
@@ -30,9 +31,10 @@ import { FormError } from '../FormError';
 
 export function DashboardPage() {
   const { user, refreshUser } = useAuth();
+  const { canCreateUsers, canViewUsers } = useTenantPermissions();
   const tenantsQuery = useTenants();
-  const membersQuery = useMembers();
-  const invitationsQuery = useInvitations();
+  const membersQuery = useMembers(canViewUsers);
+  const invitationsQuery = useInvitations(canViewUsers);
   const createTenantMutation = useCreateTenant();
   const createInvitationMutation = useCreateInvitation();
   const { notify, notifyError } = useFeedback();
@@ -97,7 +99,11 @@ export function DashboardPage() {
 
       <section className="metric-grid">
         <Metric icon={Building2} label="Tenants" value={tenants.length} />
-        <Metric icon={Users} label="Members" value={members.length} />
+        <Metric
+          icon={Users}
+          label="Members"
+          value={canViewUsers ? members.length : 0}
+        />
         <Metric
           icon={Send}
           label="Pending invitations"
@@ -141,84 +147,99 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card
-          component="form"
-          onSubmit={(event) => void invitationForm.handleSubmit(invite)(event)}
-        >
-          <CardContent className="grid gap-4">
-            <h2>Invite member</h2>
-            <TextField
-              error={Boolean(invitationForm.formState.errors.email)}
-              helperText={invitationForm.formState.errors.email?.message}
-              label="Email"
-              required
-              size="small"
-              type="email"
-              {...invitationForm.register('email')}
-            />
-            <div className="grid gap-4 md:grid-cols-[1fr_8rem]">
+        {canCreateUsers ? (
+          <Card
+            component="form"
+            onSubmit={(event) =>
+              void invitationForm.handleSubmit(invite)(event)
+            }
+          >
+            <CardContent className="grid gap-4">
+              <h2>Invite member</h2>
               <TextField
-                error={Boolean(invitationForm.formState.errors.role)}
-                helperText={invitationForm.formState.errors.role?.message}
-                label="Role"
+                error={Boolean(invitationForm.formState.errors.email)}
+                helperText={invitationForm.formState.errors.email?.message}
+                label="Email"
                 required
-                select
                 size="small"
-                defaultValue="support"
-                {...invitationForm.register('role')}
-              >
-                {membershipRoles
-                  .filter((role) => role !== 'owner')
-                  .map((role) => (
-                    <MenuItem key={role} value={role}>
-                      {title(role)}
-                    </MenuItem>
-                  ))}
-              </TextField>
-              <TextField
-                error={Boolean(
-                  invitationForm.formState.errors.expires_in_hours,
-                )}
-                helperText={
-                  invitationForm.formState.errors.expires_in_hours?.message
-                }
-                label="Hours"
-                slotProps={{ htmlInput: { min: 1, max: 720 } }}
-                size="small"
-                type="number"
-                defaultValue={168}
-                {...invitationForm.register('expires_in_hours', {
-                  valueAsNumber: true,
-                })}
+                type="email"
+                {...invitationForm.register('email')}
               />
-            </div>
-            <Button
-              disabled={createInvitationMutation.isPending}
-              startIcon={<SendIcon />}
-              type="submit"
-            >
-              Send invite
-            </Button>
-          </CardContent>
-        </Card>
+              <div className="grid gap-4 md:grid-cols-[1fr_8rem]">
+                <TextField
+                  error={Boolean(invitationForm.formState.errors.role)}
+                  helperText={invitationForm.formState.errors.role?.message}
+                  label="Role"
+                  required
+                  select
+                  size="small"
+                  defaultValue="support"
+                  {...invitationForm.register('role')}
+                >
+                  {membershipRoles
+                    .filter((role) => role !== 'owner')
+                    .map((role) => (
+                      <MenuItem key={role} value={role}>
+                        {title(role)}
+                      </MenuItem>
+                    ))}
+                </TextField>
+                <TextField
+                  error={Boolean(
+                    invitationForm.formState.errors.expires_in_hours,
+                  )}
+                  helperText={
+                    invitationForm.formState.errors.expires_in_hours?.message
+                  }
+                  label="Hours"
+                  slotProps={{ htmlInput: { min: 1, max: 720 } }}
+                  size="small"
+                  type="number"
+                  defaultValue={168}
+                  {...invitationForm.register('expires_in_hours', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </div>
+              <Button
+                disabled={createInvitationMutation.isPending}
+                startIcon={<SendIcon />}
+                type="submit"
+              >
+                Send invite
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="grid gap-4">
+              <h2>Invite member</h2>
+              <p className="muted">
+                Your current tenant role cannot create invitations.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </section>
 
-      <section className="panel">
-        <h2>Recent invitations</h2>
-        <div className="table">
-          {invitations.slice(0, 5).map((invitation) => (
-            <div className="table-row" key={invitation.id}>
-              <span>{invitation.email}</span>
-              <span>{title(invitation.role)}</span>
-              <span>{invitation.is_pending ? 'Pending' : 'Closed'}</span>
-              <span>{formatDate(invitation.expires_at)}</span>
-            </div>
-          ))}
-          {invitations.length === 0 && (
-            <p className="muted">No invitations yet.</p>
-          )}
-        </div>
-      </section>
+      {canViewUsers && (
+        <section className="panel">
+          <h2>Recent invitations</h2>
+          <div className="table">
+            {invitations.slice(0, 5).map((invitation) => (
+              <div className="table-row" key={invitation.id}>
+                <span>{invitation.email}</span>
+                <span>{title(invitation.role)}</span>
+                <span>{invitation.is_pending ? 'Pending' : 'Closed'}</span>
+                <span>{formatDate(invitation.expires_at)}</span>
+              </div>
+            ))}
+            {invitations.length === 0 && (
+              <p className="muted">No invitations yet.</p>
+            )}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
