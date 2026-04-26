@@ -1,47 +1,82 @@
 # NWL Panel
 
-React admin panel for the NWL API. It is built with Vite, TypeScript, React Router, and a small typed API client for the Laravel `/api/v1` contract.
+Modern React admin panel for the NWL ecosystem.
 
-## Requirements
+Built for scalability, maintainability, and real-time interaction with the NWL API.
 
-- Node.js 20+
-- npm 10+
-- NWL API running locally or in an accessible environment
+---
 
-## Setup
+## ✨ Stack
+
+- React 18 + Vite
+- TypeScript (strict)
+- React Router
+- Material UI (UI system)
+- TailwindCSS (layout & utilities)
+- TanStack Query (server state)
+- Zod (runtime validation)
+- Axios (HTTP client)
+
+---
+
+## 📦 Features
+
+- Authentication (login / register / invite flow)
+- Multi-tenant system
+- Member management (roles, permissions)
+- Invitation system
+- Discord integration
+- API-first architecture
+
+---
+
+## 🚀 Getting Started
 
 ```bash
-cp .env.example .env
+git clone https://github.com/stanislawsze/nwl-panel.git
+cd nwl-panel
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-The default API URL is `http://localhost/api/v1`. Change `VITE_API_BASE_URL` when the backend runs elsewhere.
+---
 
-## Scripts
+## 🧱 Project Structure
 
-```bash
-npm run lint
-npm run format
-npm test
-npm run build
+```
+src/
+  app/
+  features/
+  shared/
+  entities/
+  pages/
 ```
 
-## Included Flows
+---
 
-- Email/password sign in and registration
-- Invitation preview, invited-user registration, and existing-user acceptance
-- Tenant creation and tenant switching
-- Member listing, role updates, and removal
-- Tenant invitations
-- Discord integration settings
+## 🧠 Architecture Philosophy
 
-## CI
+- Feature-based architecture
+- Typed API layer (Zod)
+- UI consistency with MUI
+- Tailwind for layout
+- React Query for server state
 
-GitHub Actions runs on pushes to `main` and pull requests:
+---
 
-- `npm ci`
-- `npm run lint`
-- `npm run format`
-- `npm test`
-- `npm run build`
+## 🧪 Scripts
+
+```
+npm run dev
+npm run build
+npm run lint
+npm run format
+npm run test
+```
+
+---
+
+## 📜 License
+
+MIT
