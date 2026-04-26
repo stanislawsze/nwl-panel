@@ -1,67 +1,80 @@
-import { Building2, Plus, Send, Users, type LucideIcon } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import AddIcon from '@mui/icons-material/Add';
+import SendIcon from '@mui/icons-material/Send';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button, Card, CardContent, MenuItem, TextField } from '@mui/material';
+import { Building2, Send, Users, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 
-import { api } from '../../lib/api';
+import {
+  useCreateInvitation,
+  useInvitations,
+} from '../../features/invitations/use-invitations';
+import { useMembers } from '../../features/members/use-members';
+import {
+  useCreateTenant,
+  useTenants,
+} from '../../features/tenants/use-tenants';
 import { formatDate, title } from '../../lib/format';
 import { useAuth } from '../../modules/auth/AuthProvider';
-import type { Tenant, TenantInvitation, TenantMember } from '../../types';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  invitationFormSchema,
+  tenantFormSchema,
+  type InvitationFormValues,
+  type TenantFormValues,
+} from '../../shared/forms/schemas';
 import { membershipRoles } from '../../types';
 import { FormError } from '../FormError';
 
 export function DashboardPage() {
   const { user, refreshUser } = useAuth();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [members, setMembers] = useState<TenantMember[]>([]);
-  const [invitations, setInvitations] = useState<TenantInvitation[]>([]);
+  const tenantsQuery = useTenants();
+  const membersQuery = useMembers();
+  const invitationsQuery = useInvitations();
+  const createTenantMutation = useCreateTenant();
+  const createInvitationMutation = useCreateInvitation();
+  const { notify, notifyError } = useFeedback();
   const [error, setError] = useState<unknown>(null);
+  const tenantForm = useForm<TenantFormValues>({
+    resolver: zodResolver(tenantFormSchema),
+  });
+  const invitationForm = useForm<InvitationFormValues>({
+    defaultValues: {
+      role: 'support',
+      expires_in_hours: 168,
+    },
+    resolver: zodResolver(invitationFormSchema),
+  });
 
-  async function load() {
-    const [tenantData, memberData, invitationData] = await Promise.all([
-      api.tenants(),
-      api.members().catch(() => []),
-      api.invitations().catch(() => []),
-    ]);
-    setTenants(tenantData);
-    setMembers(memberData);
-    setInvitations(invitationData);
-  }
+  const tenants = tenantsQuery.data ?? [];
+  const members = membersQuery.data ?? [];
+  const invitations = invitationsQuery.data ?? [];
 
-  useEffect(() => {
-    load().catch(setError);
-  }, []);
-
-  async function createTenant(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function createTenant(values: TenantFormValues) {
     setError(null);
-    const form = event.currentTarget;
-    const data = new FormData(form);
 
     try {
-      await api.createTenant({ name: String(data.get('name')) });
-      form.reset();
+      await createTenantMutation.mutateAsync(values);
+      tenantForm.reset();
       await refreshUser();
-      await load();
+      notify('Tenant created.');
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Could not create tenant.');
     }
   }
 
-  async function invite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function invite(values: InvitationFormValues) {
     setError(null);
-    const form = event.currentTarget;
-    const data = new FormData(form);
 
     try {
-      await api.createInvitation({
-        email: String(data.get('email')),
-        role: String(data.get('role')) as TenantInvitation['role'],
-        expires_in_hours: Number(data.get('expires_in_hours') || 168),
-      });
-      form.reset();
-      await load();
+      await createInvitationMutation.mutateAsync(values);
+      invitationForm.reset({ role: 'support', expires_in_hours: 168 });
+      notify('Invitation sent.');
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Could not send invitation.');
     }
   }
 
@@ -87,56 +100,102 @@ export function DashboardPage() {
         />
       </section>
 
-      <FormError error={error} />
+      <FormError
+        error={
+          error ??
+          tenantsQuery.error ??
+          membersQuery.error ??
+          invitationsQuery.error
+        }
+      />
 
       <section className="two-column">
-        <form className="panel" onSubmit={createTenant}>
-          <h2>Create tenant</h2>
-          <label>
-            Name
-            <input name="name" required type="text" />
-          </label>
-          <button type="submit">
-            <Plus aria-hidden="true" size={18} />
-            Create
-          </button>
-        </form>
+        <Card
+          component="form"
+          onSubmit={(event) =>
+            void tenantForm.handleSubmit(createTenant)(event)
+          }
+        >
+          <CardContent className="grid gap-4">
+            <h2>Create tenant</h2>
+            <TextField
+              error={Boolean(tenantForm.formState.errors.name)}
+              helperText={tenantForm.formState.errors.name?.message}
+              label="Name"
+              required
+              size="small"
+              {...tenantForm.register('name')}
+            />
+            <Button
+              disabled={createTenantMutation.isPending}
+              startIcon={<AddIcon />}
+              type="submit"
+            >
+              Create
+            </Button>
+          </CardContent>
+        </Card>
 
-        <form className="panel" onSubmit={invite}>
-          <h2>Invite member</h2>
-          <label>
-            Email
-            <input name="email" required type="email" />
-          </label>
-          <div className="inline-fields">
-            <label>
-              Role
-              <select name="role" required defaultValue="support">
+        <Card
+          component="form"
+          onSubmit={(event) => void invitationForm.handleSubmit(invite)(event)}
+        >
+          <CardContent className="grid gap-4">
+            <h2>Invite member</h2>
+            <TextField
+              error={Boolean(invitationForm.formState.errors.email)}
+              helperText={invitationForm.formState.errors.email?.message}
+              label="Email"
+              required
+              size="small"
+              type="email"
+              {...invitationForm.register('email')}
+            />
+            <div className="grid gap-4 md:grid-cols-[1fr_8rem]">
+              <TextField
+                error={Boolean(invitationForm.formState.errors.role)}
+                helperText={invitationForm.formState.errors.role?.message}
+                label="Role"
+                required
+                select
+                size="small"
+                defaultValue="support"
+                {...invitationForm.register('role')}
+              >
                 {membershipRoles
                   .filter((role) => role !== 'owner')
                   .map((role) => (
-                    <option key={role} value={role}>
+                    <MenuItem key={role} value={role}>
                       {title(role)}
-                    </option>
+                    </MenuItem>
                   ))}
-              </select>
-            </label>
-            <label>
-              Hours
-              <input
-                defaultValue={168}
-                min={1}
-                max={720}
-                name="expires_in_hours"
+              </TextField>
+              <TextField
+                error={Boolean(
+                  invitationForm.formState.errors.expires_in_hours,
+                )}
+                helperText={
+                  invitationForm.formState.errors.expires_in_hours?.message
+                }
+                label="Hours"
+                slotProps={{ htmlInput: { min: 1, max: 720 } }}
+                size="small"
                 type="number"
+                defaultValue={168}
+                {...invitationForm.register('expires_in_hours', {
+                  valueAsNumber: true,
+                })}
               />
-            </label>
-          </div>
-          <button type="submit">
-            <Send aria-hidden="true" size={18} />
-            Send invite
-          </button>
-        </form>
+            </div>
+            <Button
+              disabled={createInvitationMutation.isPending}
+              startIcon={<SendIcon />}
+              type="submit"
+            >
+              Send invite
+            </Button>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="panel">

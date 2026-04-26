@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { api, authToken } from '../../lib/api';
+import { api, authExpiredEvent, authToken } from '../../lib/api';
 import type { AuthPayload, User } from '../../types';
 
 type AuthContextValue = {
@@ -28,6 +28,7 @@ type AuthContextValue = {
   ) => Promise<void>;
   acceptInvitation: (token: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  refreshSession: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -63,6 +64,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsBooting(false));
   }, [refreshUser, token]);
 
+  useEffect(() => {
+    function expireSession() {
+      setToken(null);
+      setUser(null);
+    }
+
+    window.addEventListener(authExpiredEvent, expireSession);
+
+    return () => window.removeEventListener(authExpiredEvent, expireSession);
+  }, []);
+
   const setAuthenticated = useCallback((payload: AuthPayload) => {
     const nextUser = persistSession(payload);
     setToken(payload.token);
@@ -86,6 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await refreshUser();
       },
       refreshUser,
+      refreshSession: async () => {
+        const refreshed = await api.refresh();
+        authToken.set(refreshed.token);
+        setToken(refreshed.token);
+        await refreshUser();
+      },
       signOut: async () => {
         await api.logout().catch(() => undefined);
         authToken.clear();

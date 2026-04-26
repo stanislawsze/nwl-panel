@@ -1,42 +1,76 @@
-import { Save } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import SaveIcon from '@mui/icons-material/Save';
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  Button,
+  Card,
+  CardContent,
+  FormControlLabel,
+  Switch,
+  TextField,
+} from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 
-import { api } from '../../lib/api';
-import type { DiscordIntegration } from '../../types';
+import {
+  useDiscordIntegration,
+  useSaveDiscordIntegration,
+} from '../../features/discord/use-discord-integration';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  discordIntegrationFormSchema,
+  type DiscordIntegrationFormValues,
+} from '../../shared/forms/schemas';
 import { FormError } from '../FormError';
 
 export function DiscordPage() {
-  const [integration, setIntegration] = useState<DiscordIntegration | null>(
-    null,
-  );
+  const integrationQuery = useDiscordIntegration();
+  const saveIntegrationMutation = useSaveDiscordIntegration();
+  const { notify, notifyError } = useFeedback();
   const [error, setError] = useState<unknown>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const integration = integrationQuery.data ?? null;
+  const form = useForm<DiscordIntegrationFormValues>({
+    defaultValues: {
+      guild_id: '',
+      guild_name: '',
+      oauth_client_id: '',
+      oauth_client_secret: '',
+      oauth_redirect_uri: '',
+      bot_token: '',
+      bot_enabled: false,
+      is_active: false,
+    },
+    resolver: zodResolver(discordIntegrationFormSchema),
+  });
 
   useEffect(() => {
-    api.discordIntegration().then(setIntegration).catch(setError);
-  }, []);
+    if (!integration) {
+      return;
+    }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    form.reset({
+      guild_id: integration.guild_id ?? '',
+      guild_name: integration.guild_name ?? '',
+      oauth_client_id: integration.oauth.client_id ?? '',
+      oauth_client_secret: '',
+      oauth_redirect_uri: integration.oauth.redirect_uri ?? '',
+      bot_token: '',
+      bot_enabled: integration.bot_enabled,
+      is_active: integration.is_active,
+    });
+  }, [form, integration]);
+
+  async function submit(values: DiscordIntegrationFormValues) {
     setError(null);
     setIsSaved(false);
-    const data = new FormData(event.currentTarget);
 
     try {
-      const updated = await api.saveDiscordIntegration({
-        guild_id: String(data.get('guild_id') ?? ''),
-        guild_name: String(data.get('guild_name') ?? ''),
-        oauth_client_id: String(data.get('oauth_client_id') ?? ''),
-        oauth_client_secret: String(data.get('oauth_client_secret') ?? ''),
-        oauth_redirect_uri: String(data.get('oauth_redirect_uri') ?? ''),
-        bot_token: String(data.get('bot_token') ?? ''),
-        bot_enabled: data.get('bot_enabled') === 'on',
-        is_active: data.get('is_active') === 'on',
-      });
-      setIntegration(updated);
+      await saveIntegrationMutation.mutateAsync(values);
       setIsSaved(true);
+      notify('Discord settings saved.');
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Could not save Discord settings.');
     }
   }
 
@@ -56,83 +90,107 @@ export function DiscordPage() {
         )}
       </div>
 
-      <FormError error={error} />
+      <FormError error={error ?? integrationQuery.error} />
 
-      <form className="panel settings-form" onSubmit={submit}>
-        <div className="two-column">
-          <label>
-            Guild ID
-            <input
-              defaultValue={integration?.guild_id ?? ''}
-              name="guild_id"
-              type="text"
+      <Card
+        component="form"
+        className="settings-form"
+        onSubmit={(event) => void form.handleSubmit(submit)(event)}
+      >
+        <CardContent className="grid gap-4">
+          <div className="two-column">
+            <TextField
+              error={Boolean(form.formState.errors.guild_id)}
+              helperText={form.formState.errors.guild_id?.message}
+              label="Guild ID"
+              required
+              size="small"
+              {...form.register('guild_id')}
             />
-          </label>
-          <label>
-            Guild name
-            <input
-              defaultValue={integration?.guild_name ?? ''}
-              name="guild_name"
-              type="text"
+            <TextField
+              error={Boolean(form.formState.errors.guild_name)}
+              helperText={form.formState.errors.guild_name?.message}
+              label="Guild name"
+              required
+              size="small"
+              {...form.register('guild_name')}
             />
-          </label>
-          <label>
-            OAuth client ID
-            <input
-              defaultValue={integration?.oauth.client_id ?? ''}
-              name="oauth_client_id"
-              type="text"
+            <TextField
+              error={Boolean(form.formState.errors.oauth_client_id)}
+              helperText={form.formState.errors.oauth_client_id?.message}
+              label="OAuth client ID"
+              size="small"
+              {...form.register('oauth_client_id')}
             />
-          </label>
-          <label>
-            OAuth redirect URI
-            <input
-              defaultValue={integration?.oauth.redirect_uri ?? ''}
-              name="oauth_redirect_uri"
+            <TextField
+              error={Boolean(form.formState.errors.oauth_redirect_uri)}
+              helperText={form.formState.errors.oauth_redirect_uri?.message}
+              label="OAuth redirect URI"
+              size="small"
               type="url"
+              {...form.register('oauth_redirect_uri')}
             />
-          </label>
-          <label>
-            OAuth client secret
-            <input
-              name="oauth_client_secret"
+            <TextField
+              error={Boolean(form.formState.errors.oauth_client_secret)}
+              helperText={form.formState.errors.oauth_client_secret?.message}
+              label="OAuth client secret"
               placeholder={integration?.oauth.has_client_secret ? 'Stored' : ''}
+              size="small"
               type="password"
+              {...form.register('oauth_client_secret')}
             />
-          </label>
-          <label>
-            Bot token
-            <input
-              name="bot_token"
+            <TextField
+              error={Boolean(form.formState.errors.bot_token)}
+              helperText={form.formState.errors.bot_token?.message}
+              label="Bot token"
               placeholder={integration?.bot.has_token ? 'Stored' : ''}
+              size="small"
               type="password"
+              {...form.register('bot_token')}
             />
-          </label>
-        </div>
-        <div className="toggle-row">
-          <label>
-            <input
-              defaultChecked={integration?.bot_enabled ?? false}
+          </div>
+          <div className="toggle-row">
+            <Controller
+              control={form.control}
               name="bot_enabled"
-              type="checkbox"
+              render={({ field }) => (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={field.value}
+                      onChange={(_, checked) => field.onChange(checked)}
+                    />
+                  }
+                  label="Bot enabled"
+                />
+              )}
             />
-            Bot enabled
-          </label>
-          <label>
-            <input
-              defaultChecked={integration?.is_active ?? false}
+            <Controller
+              control={form.control}
               name="is_active"
-              type="checkbox"
+              render={({ field }) => (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={field.value}
+                      onChange={(_, checked) => field.onChange(checked)}
+                    />
+                  }
+                  label="Integration active"
+                />
+              )}
             />
-            Integration active
-          </label>
-        </div>
-        <button type="submit">
-          <Save aria-hidden="true" size={18} />
-          Save settings
-        </button>
-        {isSaved && <p className="success">Discord settings saved.</p>}
-      </form>
+          </div>
+          <Button
+            disabled={saveIntegrationMutation.isPending}
+            startIcon={<SaveIcon />}
+            type="submit"
+          >
+            Save settings
+          </Button>
+          {isSaved && <p className="success">Discord settings saved.</p>}
+        </CardContent>
+      </Card>
     </main>
   );
 }

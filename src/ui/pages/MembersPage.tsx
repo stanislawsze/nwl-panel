@@ -1,60 +1,91 @@
-import { ShieldCheck, Trash2, UserPlus } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button, IconButton, MenuItem, TextField } from '@mui/material';
+import { Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 
-import { api } from '../../lib/api';
+import {
+  useInvitations,
+  useResendInvitation,
+} from '../../features/invitations/use-invitations';
+import {
+  useAddMember,
+  useMembers,
+  useRemoveMember,
+  useUpdateMember,
+} from '../../features/members/use-members';
 import { formatDate, title } from '../../lib/format';
-import type {
-  MembershipRole,
-  TenantInvitation,
-  TenantMember,
-} from '../../types';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  memberFormSchema,
+  type MemberFormValues,
+} from '../../shared/forms/schemas';
+import type { MembershipRole } from '../../types';
 import { membershipRoles } from '../../types';
 import { FormError } from '../FormError';
 
 export function MembersPage() {
-  const [members, setMembers] = useState<TenantMember[]>([]);
-  const [invitations, setInvitations] = useState<TenantInvitation[]>([]);
+  const membersQuery = useMembers();
+  const invitationsQuery = useInvitations();
+  const addMemberMutation = useAddMember();
+  const updateMemberMutation = useUpdateMember();
+  const removeMemberMutation = useRemoveMember();
+  const resendInvitationMutation = useResendInvitation();
+  const { notify, notifyError } = useFeedback();
   const [error, setError] = useState<unknown>(null);
+  const memberForm = useForm<MemberFormValues>({
+    defaultValues: {
+      role: 'support',
+    },
+    resolver: zodResolver(memberFormSchema),
+  });
 
-  async function load() {
-    const [memberData, invitationData] = await Promise.all([
-      api.members(),
-      api.invitations(),
-    ]);
-    setMembers(memberData);
-    setInvitations(invitationData);
-  }
+  const members = membersQuery.data ?? [];
+  const invitations = invitationsQuery.data ?? [];
 
-  useEffect(() => {
-    load().catch(setError);
-  }, []);
-
-  async function addMember(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function addMember(values: MemberFormValues) {
     setError(null);
-    const form = event.currentTarget;
-    const data = new FormData(form);
 
     try {
-      await api.addMember({
-        email: String(data.get('email')),
-        role: String(data.get('role')) as MembershipRole,
-      });
-      form.reset();
-      await load();
+      await addMemberMutation.mutateAsync(values);
+      memberForm.reset({ role: 'support', email: '' });
+      notify('Member added.');
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Could not add member.');
     }
   }
 
   async function updateRole(memberId: number, role: MembershipRole) {
-    await api.updateMember(memberId, { role });
-    await load();
+    try {
+      await updateMemberMutation.mutateAsync({ userId: memberId, role });
+      notify('Member role updated.');
+    } catch (caught) {
+      setError(caught);
+      notifyError(caught, 'Could not update member role.');
+    }
   }
 
   async function remove(memberId: number) {
-    await api.removeMember(memberId);
-    await load();
+    try {
+      await removeMemberMutation.mutateAsync(memberId);
+      notify('Member removed.');
+    } catch (caught) {
+      setError(caught);
+      notifyError(caught, 'Could not remove member.');
+    }
+  }
+
+  async function resend(invitationId: number) {
+    try {
+      await resendInvitationMutation.mutateAsync(invitationId);
+      notify('Invitation resent.');
+    } catch (caught) {
+      setError(caught);
+      notifyError(caught, 'Could not resend invitation.');
+    }
   }
 
   return (
@@ -66,29 +97,49 @@ export function MembersPage() {
         </div>
       </div>
 
-      <FormError error={error} />
+      <FormError
+        error={error ?? membersQuery.error ?? invitationsQuery.error}
+      />
 
-      <form className="panel form-row" onSubmit={addMember}>
-        <label>
-          Existing user email
-          <input name="email" required type="email" />
-        </label>
-        <label>
-          Role
-          <select name="role" required defaultValue="support">
-            {membershipRoles
-              .filter((role) => role !== 'owner')
-              .map((role) => (
-                <option key={role} value={role}>
-                  {title(role)}
-                </option>
-              ))}
-          </select>
-        </label>
-        <button type="submit">
-          <UserPlus aria-hidden="true" size={18} />
+      <form
+        className="panel form-row"
+        onSubmit={(event) => void memberForm.handleSubmit(addMember)(event)}
+      >
+        <TextField
+          className="flex-1"
+          error={Boolean(memberForm.formState.errors.email)}
+          helperText={memberForm.formState.errors.email?.message}
+          label="Existing user email"
+          required
+          size="small"
+          type="email"
+          {...memberForm.register('email')}
+        />
+        <TextField
+          defaultValue="support"
+          error={Boolean(memberForm.formState.errors.role)}
+          helperText={memberForm.formState.errors.role?.message}
+          label="Role"
+          required
+          select
+          size="small"
+          {...memberForm.register('role')}
+        >
+          {membershipRoles
+            .filter((role) => role !== 'owner')
+            .map((role) => (
+              <MenuItem key={role} value={role}>
+                {title(role)}
+              </MenuItem>
+            ))}
+        </TextField>
+        <Button
+          disabled={addMemberMutation.isPending}
+          startIcon={<PersonAddIcon />}
+          type="submit"
+        >
           Add member
-        </button>
+        </Button>
       </form>
 
       <section className="panel">
@@ -100,33 +151,36 @@ export function MembersPage() {
                 <strong>{member.name}</strong>
                 <small>{member.email}</small>
               </span>
-              <select
+              <TextField
                 aria-label={`Role for ${member.name}`}
                 disabled={member.is_current_user}
-                value={member.membership_role ?? 'member'}
                 onChange={(event) =>
                   void updateRole(
                     member.id,
                     event.target.value as MembershipRole,
                   )
                 }
+                select
+                size="small"
+                value={member.membership_role ?? 'member'}
               >
                 {membershipRoles.map((role) => (
-                  <option key={role} value={role}>
+                  <MenuItem key={role} value={role}>
                     {title(role)}
-                  </option>
+                  </MenuItem>
                 ))}
-              </select>
+              </TextField>
               <span>{formatDate(member.joined_at)}</span>
-              <button
+              <IconButton
                 aria-label={`Remove ${member.name}`}
-                className="icon-button"
-                disabled={member.is_current_user}
+                disabled={
+                  member.is_current_user || removeMemberMutation.isPending
+                }
                 onClick={() => void remove(member.id)}
-                type="button"
+                size="small"
               >
                 <Trash2 aria-hidden="true" size={16} />
-              </button>
+              </IconButton>
             </div>
           ))}
           {members.length === 0 && <p className="muted">No members to show.</p>}
@@ -141,14 +195,16 @@ export function MembersPage() {
               <span>{invitation.email}</span>
               <span>{title(invitation.role)}</span>
               <span>{invitation.is_pending ? 'Pending' : 'Closed'}</span>
-              <button
-                className="ghost-button compact"
-                onClick={() => void api.resendInvitation(invitation.id)}
+              <Button
+                disabled={resendInvitationMutation.isPending}
+                onClick={() => void resend(invitation.id)}
+                size="small"
+                startIcon={<VerifiedUserIcon />}
                 type="button"
+                variant="outlined"
               >
-                <ShieldCheck aria-hidden="true" size={16} />
                 Resend
-              </button>
+              </Button>
             </div>
           ))}
           {invitations.length === 0 && (

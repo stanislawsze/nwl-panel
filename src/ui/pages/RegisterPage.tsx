@@ -1,60 +1,77 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { UserPlus } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../modules/auth/AuthProvider';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  registerFormSchema,
+  type RegisterFormValues,
+} from '../../shared/forms/schemas';
 import { FormError } from '../FormError';
 
 export function RegisterPage() {
   const { register, token } = useAuth();
+  const { notify, notifyError } = useFeedback();
   const navigate = useNavigate();
   const [error, setError] = useState<unknown>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    formState: { errors, isSubmitting },
+    handleSubmit,
+    register: registerField,
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerFormSchema),
+  });
 
   if (token) {
     return <Navigate to="/" replace />;
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(values: RegisterFormValues) {
     setError(null);
-    setIsSubmitting(true);
-    const data = new FormData(event.currentTarget);
 
     try {
-      await register({
-        name: String(data.get('name')),
-        email: String(data.get('email')),
-        password: String(data.get('password')),
-      });
+      await register(values);
+      notify('Account created successfully.');
       navigate('/', { replace: true });
     } catch (caught) {
       setError(caught);
-    } finally {
-      setIsSubmitting(false);
+      notifyError(caught, 'Registration failed.');
     }
   }
 
   return (
-    <form className="form-card" onSubmit={submit}>
+    <form
+      className="form-card"
+      onSubmit={(event) => void handleSubmit(submit)(event)}
+    >
       <h2>Create account</h2>
       <label>
         Name
-        <input autoComplete="name" name="name" required type="text" />
+        <input autoComplete="name" {...registerField('name')} type="text" />
+        {errors.name && (
+          <small className="field-error">{errors.name.message}</small>
+        )}
       </label>
       <label>
         Email
-        <input autoComplete="email" name="email" required type="email" />
+        <input autoComplete="email" {...registerField('email')} type="email" />
+        {errors.email && (
+          <small className="field-error">{errors.email.message}</small>
+        )}
       </label>
       <label>
         Password
         <input
           autoComplete="new-password"
-          minLength={8}
-          name="password"
-          required
+          {...registerField('password')}
           type="password"
         />
+        {errors.password && (
+          <small className="field-error">{errors.password.message}</small>
+        )}
       </label>
       <FormError error={error} />
       <button disabled={isSubmitting} type="submit">

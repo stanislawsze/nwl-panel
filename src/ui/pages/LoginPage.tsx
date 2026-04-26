@@ -1,5 +1,7 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { KeyRound } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import {
   Link,
   Navigate,
@@ -9,35 +11,44 @@ import {
 } from 'react-router-dom';
 
 import { useAuth } from '../../modules/auth/AuthProvider';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  loginFormSchema,
+  type LoginFormValues,
+} from '../../shared/forms/schemas';
 import { FormError } from '../FormError';
 
 export function LoginPage() {
   const { signIn, token, acceptInvitation } = useAuth();
+  const { notify, notifyError } = useFeedback();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState<unknown>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    formState: { errors, isSubmitting },
+    handleSubmit,
+    register,
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+  });
 
   if (token) {
     return <Navigate to="/" replace />;
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(values: LoginFormValues) {
     setError(null);
-    setIsSubmitting(true);
-    const data = new FormData(event.currentTarget);
 
     try {
-      await signIn({
-        email: String(data.get('email')),
-        password: String(data.get('password')),
-      });
+      await signIn(values);
 
       const invitation = searchParams.get('invitation');
       if (invitation) {
         await acceptInvitation(invitation);
+        notify('Invitation accepted. Welcome in.');
+      } else {
+        notify('Signed in successfully.');
       }
 
       const redirect =
@@ -45,27 +56,33 @@ export function LoginPage() {
       navigate(redirect, { replace: true });
     } catch (caught) {
       setError(caught);
-    } finally {
-      setIsSubmitting(false);
+      notifyError(caught, 'Sign in failed.');
     }
   }
 
   return (
-    <form className="form-card" onSubmit={submit}>
+    <form
+      className="form-card"
+      onSubmit={(event) => void handleSubmit(submit)(event)}
+    >
       <h2>Sign in</h2>
       <label>
         Email
-        <input autoComplete="email" name="email" required type="email" />
+        <input autoComplete="email" {...register('email')} type="email" />
+        {errors.email && (
+          <small className="field-error">{errors.email.message}</small>
+        )}
       </label>
       <label>
         Password
         <input
           autoComplete="current-password"
-          minLength={8}
-          name="password"
-          required
+          {...register('password')}
           type="password"
         />
+        {errors.password && (
+          <small className="field-error">{errors.password.message}</small>
+        )}
       </label>
       <FormError error={error} />
       <button disabled={isSubmitting} type="submit">

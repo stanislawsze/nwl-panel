@@ -1,18 +1,22 @@
+import axios, { AxiosError } from 'axios';
+import { z } from 'zod';
+
 import { config } from '../config';
-import type {
-  ApiEnvelope,
-  AuthPayload,
-  DiscordIntegration,
-  DiscordIntegrationPayload,
-  InvitationPreview,
-  MembershipRole,
-  Tenant,
-  TenantInvitation,
-  TenantMember,
-  User,
+import {
+  authPayloadSchema,
+  discordIntegrationPayloadSchema,
+  discordIntegrationSchema,
+  invitationPreviewSchema,
+  tenantInvitationSchema,
+  tenantMemberSchema,
+  tenantSchema,
+  userSchema,
+  type ApiEnvelope,
+  type MembershipRole,
 } from '../types';
 
 const tokenKey = 'nwl-panel.auth-token';
+export const authExpiredEvent = 'nwl-panel:auth-expired';
 
 export class ApiError extends Error {
   constructor(
@@ -31,108 +35,154 @@ export const authToken = {
   clear: () => window.localStorage.removeItem(tokenKey),
 };
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set('Accept', 'application/json');
+const http = axios.create({
+  baseURL: config.apiBaseUrl,
+  headers: {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  },
+});
 
-  if (!(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-
+http.interceptors.request.use((request) => {
   const token = authToken.get();
+
   if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+    request.headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${config.apiBaseUrl}${path}`, {
-    ...options,
-    headers,
-  });
+  return request;
+});
 
-  const payload = (await response
-    .json()
-    .catch(() => null)) as ApiEnvelope<T> | null;
+function normalizeError(error: unknown): never {
+  if (error instanceof AxiosError) {
+    const payload = error.response?.data as ApiEnvelope<unknown> | undefined;
+    const status = error.response?.status ?? 0;
 
-  if (!response.ok) {
+    if (status === 401) {
+      authToken.clear();
+      window.dispatchEvent(new Event(authExpiredEvent));
+    }
+
     const message =
       typeof payload?.meta?.message === 'string'
         ? payload.meta.message
-        : response.status === 422
-          ? 'Please check the submitted values.'
-          : 'The API request failed.';
+        : status === 401
+          ? 'Your session expired. Please sign in again.'
+          : status === 422
+            ? 'Please check the submitted values.'
+            : 'The API request failed.';
 
-    throw new ApiError(message, response.status, payload);
+    throw new ApiError(message, status, payload ?? error);
   }
 
-  return payload?.data as T;
+  throw error;
 }
 
-const body = (payload: unknown) => JSON.stringify(payload);
+function normalizeParseError(error: unknown): never {
+  if (error instanceof z.ZodError) {
+    throw new ApiError(
+      'The API response did not match the expected frontend contract.',
+      0,
+      error.issues,
+    );
+  }
+
+  normalizeError(error);
+}
+
+async function request<TSchema extends z.ZodType>(
+  schema: TSchema,
+  path: string,
+  options: {
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    data?: unknown;
+  } = {},
+): Promise<z.infer<TSchema>> {
+  try {
+    const response = await http.request<ApiEnvelope<unknown>>({
+      url: path,
+      method: options.method ?? 'GET',
+      data: options.data,
+    });
+
+    return schema.parse(response.data.data);
+  } catch (error) {
+    normalizeParseError(error);
+  }
+}
 
 export const api = {
   login: (payload: { email: string; password: string }) =>
-    request<AuthPayload>('/login', { method: 'POST', body: body(payload) }),
+    request(authPayloadSchema, '/login', { method: 'POST', data: payload }),
   register: (payload: { name: string; email: string; password: string }) =>
-    request<AuthPayload>('/register', { method: 'POST', body: body(payload) }),
-  me: () => request<User>('/me'),
-  logout: () => request<null>('/logout', { method: 'POST' }),
-  tenants: () => request<Tenant[]>('/tenants'),
+    request(authPayloadSchema, '/register', { method: 'POST', data: payload }),
+  me: () => request(userSchema, '/me'),
+  refresh: () =>
+    request(z.object({ token: z.string() }), '/refresh', { method: 'POST' }),
+  logout: () => request(z.null(), '/logout', { method: 'POST' }),
+  tenants: () => request(z.array(tenantSchema), '/tenants'),
   createTenant: (payload: { name: string }) =>
-    request<Tenant>('/tenants', { method: 'POST', body: body(payload) }),
+    request(tenantSchema, '/tenants', { method: 'POST', data: payload }),
   switchTenant: (tenantId: number) =>
-    request<Tenant>(`/tenants/${tenantId}/switch`, { method: 'POST' }),
-  members: () => request<TenantMember[]>('/tenants/current/members'),
+    request(tenantSchema, `/tenants/${tenantId}/switch`, { method: 'POST' }),
+  members: () =>
+    request(z.array(tenantMemberSchema), '/tenants/current/members'),
   addMember: (payload: { email: string; role: MembershipRole }) =>
-    request<TenantMember>('/tenants/current/members', {
+    request(tenantMemberSchema, '/tenants/current/members', {
       method: 'POST',
-      body: body(payload),
+      data: payload,
     }),
   updateMember: (userId: number, payload: { role: MembershipRole }) =>
-    request<TenantMember>(`/tenants/current/members/${userId}`, {
+    request(tenantMemberSchema, `/tenants/current/members/${userId}`, {
       method: 'PATCH',
-      body: body(payload),
+      data: payload,
     }),
   removeMember: (userId: number) =>
-    request<null>(`/tenants/current/members/${userId}`, { method: 'DELETE' }),
+    request(z.null(), `/tenants/current/members/${userId}`, {
+      method: 'DELETE',
+    }),
   invitations: () =>
-    request<TenantInvitation[]>('/tenants/current/invitations'),
+    request(z.array(tenantInvitationSchema), '/tenants/current/invitations'),
   createInvitation: (payload: {
     email: string;
     role: MembershipRole;
     expires_in_hours?: number;
   }) =>
-    request<TenantInvitation>('/tenants/current/invitations', {
+    request(tenantInvitationSchema, '/tenants/current/invitations', {
       method: 'POST',
-      body: body(payload),
+      data: payload,
     }),
   resendInvitation: (invitationId: number) =>
-    request<TenantInvitation>(
+    request(
+      tenantInvitationSchema,
       `/tenants/current/invitations/${invitationId}/resend`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+      },
     ),
   revokeInvitation: (invitationId: number) =>
-    request<null>(`/tenants/current/invitations/${invitationId}`, {
+    request(z.null(), `/tenants/current/invitations/${invitationId}`, {
       method: 'DELETE',
     }),
   previewInvitation: (token: string) =>
-    request<InvitationPreview>(`/tenants/invitations/${token}`),
+    request(invitationPreviewSchema, `/tenants/invitations/${token}`),
   registerInvitation: (
     token: string,
     payload: { name: string; password: string },
   ) =>
-    request<AuthPayload>(`/tenants/invitations/${token}/register`, {
+    request(authPayloadSchema, `/tenants/invitations/${token}/register`, {
       method: 'POST',
-      body: body(payload),
+      data: payload,
     }),
   acceptInvitation: (token: string) =>
-    request<TenantInvitation>(`/tenants/invitations/${token}/accept`, {
+    request(tenantInvitationSchema, `/tenants/invitations/${token}/accept`, {
       method: 'POST',
     }),
   discordIntegration: () =>
-    request<DiscordIntegrationPayload>('/discord/integration'),
+    request(discordIntegrationPayloadSchema, '/discord/integration'),
   saveDiscordIntegration: (payload: Record<string, unknown>) =>
-    request<DiscordIntegration>('/discord/integration', {
+    request(discordIntegrationSchema, '/discord/integration', {
       method: 'PUT',
-      body: body(payload),
+      data: payload,
     }),
 };

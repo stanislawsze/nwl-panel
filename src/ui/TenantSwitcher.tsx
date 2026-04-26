@@ -1,27 +1,17 @@
 import { RefreshCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
-import { api } from '../lib/api';
+import { useSwitchTenant, useTenants } from '../features/tenants/use-tenants';
 import { useAuth } from '../modules/auth/AuthProvider';
-import type { Tenant } from '../types';
 
 export function TenantSwitcher() {
   const { user, refreshUser } = useAuth();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    api
-      .tenants()
-      .then(setTenants)
-      .catch(() => setTenants([]));
-  }, [user?.current_tenant?.id]);
+  const tenantsQuery = useTenants();
+  const switchTenantMutation = useSwitchTenant();
+  const tenants = tenantsQuery.data ?? [];
 
   async function switchTenant(tenantId: number) {
-    setIsLoading(true);
-    await api.switchTenant(tenantId);
+    await switchTenantMutation.mutateAsync(tenantId);
     await refreshUser();
-    setIsLoading(false);
   }
 
   return (
@@ -29,7 +19,7 @@ export function TenantSwitcher() {
       <RefreshCcw aria-hidden="true" size={16} />
       <select
         aria-label="Current tenant"
-        disabled={isLoading || tenants.length === 0}
+        disabled={switchTenantMutation.isPending || tenants.length === 0}
         value={user?.current_tenant?.id ?? ''}
         onChange={(event) => void switchTenant(Number(event.target.value))}
       >

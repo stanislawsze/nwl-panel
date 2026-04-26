@@ -1,36 +1,95 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
-import { AppLayout } from './ui/AppLayout';
-import { AuthLayout } from './ui/AuthLayout';
-import { DashboardPage } from './ui/pages/DashboardPage';
-import { DiscordPage } from './ui/pages/DiscordPage';
-import { InvitationPage } from './ui/pages/InvitationPage';
-import { LoginPage } from './ui/pages/LoginPage';
-import { MembersPage } from './ui/pages/MembersPage';
-import { RegisterPage } from './ui/pages/RegisterPage';
+import { AppProviders } from './app/providers/AppProviders';
+import { RootRoute } from './app/RootRoute';
+import { AppErrorBoundary } from './ui/AppErrorBoundary';
 import { RequireAuth } from './ui/RequireAuth';
 
 export const router = createBrowserRouter([
   {
-    element: <AuthLayout />,
-    children: [
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
-      { path: '/invitations/:token', element: <InvitationPage /> },
-    ],
-  },
-  {
-    element: <RequireAuth />,
+    element: <RootRoute />,
+    errorElement: (
+      <AppProviders>
+        <AppErrorBoundary />
+      </AppProviders>
+    ),
     children: [
       {
-        element: <AppLayout />,
+        lazy: async () => {
+          const { AuthLayout } = await import('./ui/AuthLayout');
+
+          return { Component: AuthLayout };
+        },
         children: [
-          { index: true, element: <DashboardPage /> },
-          { path: '/members', element: <MembersPage /> },
-          { path: '/discord', element: <DiscordPage /> },
+          {
+            path: '/login',
+            lazy: async () => {
+              const { LoginPage } = await import('./ui/pages/LoginPage');
+
+              return { Component: LoginPage };
+            },
+          },
+          {
+            path: '/register',
+            lazy: async () => {
+              const { RegisterPage } = await import('./ui/pages/RegisterPage');
+
+              return { Component: RegisterPage };
+            },
+          },
+          {
+            path: '/invitations/:token',
+            lazy: async () => {
+              const { InvitationPage } =
+                await import('./ui/pages/InvitationPage');
+
+              return { Component: InvitationPage };
+            },
+          },
         ],
       },
+      {
+        element: <RequireAuth />,
+        children: [
+          {
+            lazy: async () => {
+              const { AppLayout } = await import('./ui/AppLayout');
+
+              return { Component: AppLayout };
+            },
+            children: [
+              {
+                index: true,
+                lazy: async () => {
+                  const { DashboardPage } =
+                    await import('./ui/pages/DashboardPage');
+
+                  return { Component: DashboardPage };
+                },
+              },
+              {
+                path: '/members',
+                lazy: async () => {
+                  const { MembersPage } =
+                    await import('./ui/pages/MembersPage');
+
+                  return { Component: MembersPage };
+                },
+              },
+              {
+                path: '/discord',
+                lazy: async () => {
+                  const { DiscordPage } =
+                    await import('./ui/pages/DiscordPage');
+
+                  return { Component: DiscordPage };
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-  { path: '*', element: <Navigate to="/" replace /> },
 ]);

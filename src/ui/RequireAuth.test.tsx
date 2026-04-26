@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { AuthProvider } from '../modules/auth/AuthProvider';
+import { AppProviders } from '../app/providers/AppProviders';
 import { RequireAuth } from './RequireAuth';
 
 describe('RequireAuth', () => {
@@ -21,9 +21,9 @@ describe('RequireAuth', () => {
     );
 
     render(
-      <AuthProvider>
+      <AppProviders>
         <RouterProvider router={router} />
-      </AuthProvider>,
+      </AppProviders>,
     );
 
     expect(await screen.findByText('Sign in page')).toBeInTheDocument();

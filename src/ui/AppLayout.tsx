@@ -1,7 +1,16 @@
-import { LogOut, MessageCircle, Users, Workflow } from 'lucide-react';
+import { IconButton, Tooltip } from '@mui/material';
+import {
+  LogOut,
+  MessageCircle,
+  Moon,
+  Sun,
+  Users,
+  Workflow,
+} from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { useAuth } from '../modules/auth/AuthProvider';
+import { useColorMode } from '../shared/theme/ColorModeProvider';
 import { TenantSwitcher } from './TenantSwitcher';
 
 const navItems = [
@@ -12,6 +21,7 @@ const navItems = [
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const { mode, toggleMode } = useColorMode();
 
   return (
     <div className="app-shell">
@@ -46,7 +56,18 @@ export function AppLayout() {
             <span className="muted">Signed in as</span>
             <strong>{user?.email}</strong>
           </div>
-          <TenantSwitcher />
+          <div className="topbar-actions">
+            <TenantSwitcher />
+            <Tooltip
+              title={
+                mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+              }
+            >
+              <IconButton aria-label="Toggle color mode" onClick={toggleMode}>
+                {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </IconButton>
+            </Tooltip>
+          </div>
         </header>
         <Outlet />
       </div>

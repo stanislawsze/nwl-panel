@@ -1,39 +1,49 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Check, KeyRound, UserPlus } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { api } from '../../lib/api';
+import { useInvitationPreview } from '../../features/invitations/use-invitations';
 import { formatDate, title } from '../../lib/format';
 import { useAuth } from '../../modules/auth/AuthProvider';
-import type { InvitationPreview } from '../../types';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import {
+  invitationRegistrationFormSchema,
+  type InvitationRegistrationFormValues,
+} from '../../shared/forms/schemas';
 import { FormError } from '../FormError';
 
 export function InvitationPage() {
   const { token = '' } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
-  const [preview, setPreview] = useState<InvitationPreview | null>(null);
+  const { notify, notifyError } = useFeedback();
+  const previewQuery = useInvitationPreview(token);
   const [error, setError] = useState<unknown>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const preview = previewQuery.data ?? null;
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+  } = useForm<InvitationRegistrationFormValues>({
+    resolver: zodResolver(invitationRegistrationFormSchema),
+  });
 
-  useEffect(() => {
-    api.previewInvitation(token).then(setPreview).catch(setError);
-  }, [token]);
-
-  async function register(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function registerFromInvitation(
+    values: InvitationRegistrationFormValues,
+  ) {
     setError(null);
     setIsSubmitting(true);
-    const data = new FormData(event.currentTarget);
 
     try {
-      await auth.completeInvitationRegistration(token, {
-        name: String(data.get('name')),
-        password: String(data.get('password')),
-      });
+      await auth.completeInvitationRegistration(token, values);
+      notify('Workspace joined successfully.');
       navigate('/', { replace: true });
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Invitation registration failed.');
     } finally {
       setIsSubmitting(false);
     }
@@ -45,15 +55,17 @@ export function InvitationPage() {
 
     try {
       await auth.acceptInvitation(token);
+      notify('Invitation accepted.');
       navigate('/', { replace: true });
     } catch (caught) {
       setError(caught);
+      notifyError(caught, 'Could not accept the invitation.');
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (!preview && !error) {
+  if (!preview && !error && previewQuery.isLoading) {
     return <div className="form-card">Loading invitation...</div>;
   }
 
@@ -72,23 +84,32 @@ export function InvitationPage() {
           <strong>{formatDate(preview.expires_at)}</strong>
         </div>
       )}
-      <FormError error={error} />
+      <FormError error={error ?? previewQuery.error} />
       {preview?.status === 'pending' &&
         preview.recommended_action === 'register' && (
-          <form className="stack" onSubmit={register}>
+          <form
+            className="stack"
+            onSubmit={(event) =>
+              void handleSubmit(registerFromInvitation)(event)
+            }
+          >
             <label>
               Name
-              <input autoComplete="name" name="name" required type="text" />
+              <input autoComplete="name" {...register('name')} type="text" />
+              {errors.name && (
+                <small className="field-error">{errors.name.message}</small>
+              )}
             </label>
             <label>
               Password
               <input
                 autoComplete="new-password"
-                minLength={8}
-                name="password"
-                required
+                {...register('password')}
                 type="password"
               />
+              {errors.password && (
+                <small className="field-error">{errors.password.message}</small>
+              )}
             </label>
             <button disabled={isSubmitting} type="submit">
               <UserPlus aria-hidden="true" size={18} />
